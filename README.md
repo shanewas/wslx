@@ -31,7 +31,7 @@ wslx doctor
 
 ## Build
 
-Requires Go 1.24+.
+Requires Go 1.22+.
 
 ```sh
 go build ./...
