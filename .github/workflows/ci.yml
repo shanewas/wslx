@@ -20,3 +20,15 @@ jobs:
       - run: go build ./...
       - run: go vet ./...
       - run: go test ./...
+
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          args: release --snapshot --clean --skip=publish,sign

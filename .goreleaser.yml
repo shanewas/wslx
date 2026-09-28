@@ -1,0 +1,36 @@
+version: 2
+
+project_name: wslx
+
+builds:
+  - main: ./cmd/wslx
+    goos: [linux, windows]
+    goarch: [amd64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  skip_merge_commits: true
+
+nfpms:
+  - package_name: wslx
+    maintainer: Shanewas Ahmed
+    description: Bidirectional Windows-WSL interop helper in one static binary.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+
+release:
+  draft: true
