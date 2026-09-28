@@ -1,0 +1,22 @@
+# binaries
+*.exe
+*.dll
+*.so
+*.dylib
+/wslx
+/wslx.exe
+# test binary, build output
+*.test
+*.out
+/dist/
+# coverage
+coverage.txt
+coverage.html
+# Go workspace file (local only)
+go.work
+go.work.sum
+# editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
