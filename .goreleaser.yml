@@ -21,7 +21,9 @@ checksum:
 
 changelog:
   sort: asc
-  skip_merge_commits: true
+  filters:
+    exclude:
+      - "^Merge (pull request|branch)"
 
 nfpms:
   - package_name: wslx
