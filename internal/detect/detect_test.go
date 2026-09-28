@@ -51,8 +51,8 @@ func TestPwshCandidatesOrder(t *testing.T) {
 }
 
 func TestExists(t *testing.T) {
-	if !Exists("/tmp") {
-		t.Fatal("Exists(/tmp)=false")
+	if !Exists(t.TempDir()) {
+		t.Fatal("Exists(tempdir)=false")
 	}
 	if Exists("/no/such/path/38f6b2") {
 		t.Fatal("Exists(bogus)=true")
