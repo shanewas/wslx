@@ -214,6 +214,9 @@ func cmdWsl(args []string) {
 	if len(args) == 0 {
 		usagef("wsl", "need a command")
 	}
+	if distro != "" && detect.DetectSide() == detect.SideWSL {
+		needWindowsSide()
+	}
 	stdout, stderr, exit, err := wslrun.Run(args, distro, pipedStdin())
 	emit(stdout, stderr, childExit(err, exit))
 }
@@ -406,6 +409,8 @@ examples:
 usage: wslx wsl [--distro D] [--] <command...>
 
 Same-side rule: inside WSL without --distro runs with no hop.
+From WSL, --distro hops via interop and fails clean (pointing at
+wslx doctor) when interop is broken.
 
 examples:
   wslx wsl ls -la ~/projects
