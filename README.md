@@ -4,8 +4,10 @@ One static binary, installed on both Windows and WSL. Makes the other side
 feel native: Linux commands from PowerShell, PowerShell from WSL. No manual
 copy-paste, no quoting voodoo.
 
-> Status: pre-release scaffold. The plan is settled in [SPEC.md](SPEC.md);
-> the CLI is not implemented yet.
+> Status: pre-release. The CLI slice (`win`, `wsl`, `pwsh`, `path`,
+> `env`, `doctor`) is implemented per [SPEC.md](SPEC.md) and covered by
+> CI on Ubuntu + Windows. Live cross-boundary verification is still
+> pending (see `wslx doctor`), so no tagged release exists yet.
 
 ## Vision
 
