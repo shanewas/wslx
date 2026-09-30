@@ -4,10 +4,10 @@ One static binary, installed on both Windows and WSL. Makes the other side
 feel native: Linux commands from PowerShell, PowerShell from WSL. No manual
 copy-paste, no quoting voodoo.
 
-> Status: pre-release. The CLI slice (`win`, `wsl`, `pwsh`, `path`,
-> `env`, `doctor`) is implemented per [SPEC.md](SPEC.md) and covered by
-> CI on Ubuntu + Windows. Live cross-boundary verification is still
-> pending (see `wslx doctor`), so no tagged release exists yet.
+> Status: v0.1.0 released. The CLI slice (`win`, `wsl`, `pwsh`, `path`,
+> `env`, `doctor`) is implemented per [SPEC.md](SPEC.md), covered by
+> CI on Ubuntu + Windows, and verified live across the boundary
+> (`wslx doctor` reports all green on a healthy instance).
 
 ## Vision
 
@@ -26,15 +26,14 @@ wslx doctor
 
 ## Install
 
-> Pre-release: this repo is still private. Artifacts appear on the
-> [Releases](https://github.com/shanewas/wslx/releases) page after the first
-> tag. Replace `0.1.0` below with the release you want.
+> Artifacts live on the [Releases](https://github.com/shanewas/wslx/releases)
+> page. Replace `0.1.0` below with the release you want.
 
 Linux tarball:
 
 ```sh
 VERSION=0.1.0
-curl -sSL -o wslx.tar.gz "https://github.com/shanewas/wslx/releases/download/v${VERSION}/wslx_${VERSION}_Linux_x86_64.tar.gz"
+curl -sSL -o wslx.tar.gz "https://github.com/shanewas/wslx/releases/download/v${VERSION}/wslx_${VERSION}_linux_amd64.tar.gz"
 tar xzf wslx.tar.gz wslx
 install -m 0755 wslx ~/.local/bin/wslx
 ```
@@ -43,7 +42,7 @@ Windows zip (PowerShell):
 
 ```powershell
 $Version = "0.1.0"
-Invoke-WebRequest -OutFile wslx.zip "https://github.com/shanewas/wslx/releases/download/v$Version/wslx_${Version}_Windows_x86_64.zip"
+Invoke-WebRequest -OutFile wslx.zip "https://github.com/shanewas/wslx/releases/download/v$Version/wslx_${Version}_windows_amd64.zip"
 Expand-Archive wslx.zip "$env:LOCALAPPDATA\wslx"
 ```
 
@@ -51,9 +50,9 @@ Debian/Ubuntu and Fedora/RHEL packages:
 
 ```sh
 VERSION=0.1.0
-curl -sSL -o wslx.deb "https://github.com/shanewas/wslx/releases/download/v${VERSION}/wslx_${VERSION}_amd64.deb"
+curl -sSL -o wslx.deb "https://github.com/shanewas/wslx/releases/download/v${VERSION}/wslx_${VERSION}_linux_amd64.deb"
 sudo dpkg -i wslx.deb
-curl -sSL -o wslx.rpm "https://github.com/shanewas/wslx/releases/download/v${VERSION}/wslx_${VERSION}_x86_64.rpm"
+curl -sSL -o wslx.rpm "https://github.com/shanewas/wslx/releases/download/v${VERSION}/wslx_${VERSION}_linux_amd64.rpm"
 sudo rpm -i wslx.rpm
 ```
 
