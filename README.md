@@ -5,9 +5,9 @@ feel native: Linux commands from PowerShell, PowerShell from WSL. No manual
 copy-paste, no quoting voodoo.
 
 > Status: v0.1.0 released. The CLI slice (`win`, `wsl`, `pwsh`, `path`,
-> `env`, `doctor`) is implemented per [SPEC.md](SPEC.md), covered by
-> CI on Ubuntu + Windows, and verified live across the boundary
-> (`wslx doctor` reports all green on a healthy instance).
+> `env`, `doctor`) is covered by CI on Ubuntu + Windows and verified
+> live across the boundary (`wslx doctor` reports all green on a
+> healthy instance).
 
 ## Vision
 
@@ -68,7 +68,6 @@ Package managers (winget, scoop, chocolatey) are planned at public launch.
 
 - `cmd/wslx/` — CLI entry
 - `internal/` — side detection, runners, quoting, paths, env, doctor
-- `SPEC.md` — full v0.1 specification
 - `.github/workflows/` — CI (Ubuntu + Windows)
 
 ## Build

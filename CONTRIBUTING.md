@@ -27,7 +27,7 @@ same three steps on Ubuntu + Windows.
 - **Same-side rule.** When already on the target side, run directly with
   no hop.
 
-## Spec
+## Docs
 
-[SPEC.md](SPEC.md) is the design authority. Behavior changes update the
-spec in the same commit.
+`README.md` is the user-facing contract. Behavior changes update the
+docs in the same commit.
