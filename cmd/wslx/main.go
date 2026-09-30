@@ -33,9 +33,6 @@ func main() {
 	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(topHelp)
-		if len(args) == 0 {
-			os.Exit(2)
-		}
 		return
 	}
 	cmd, rest := args[0], args[1:]
