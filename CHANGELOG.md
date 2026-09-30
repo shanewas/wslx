@@ -10,6 +10,8 @@
 
 - Dev builds report `dev` instead of a stale release number.
 
+- Bare invocation (no arguments) exits 0 with usage help instead of 2.
+
 ## [0.1.0] - 2026-09-30
 
 ### Added
