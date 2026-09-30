@@ -9,9 +9,12 @@ import (
 )
 
 // BuildPowershellArgv returns full argv for stdin-mode PowerShell:
-// -File - preserves the exit N code, -NonInteractive never hangs.
+// -Command - reads script from stdin with clean stdout. -File - echoes
+// PS <cwd>> prompt lines to stdout on both engines (live battery
+// 2026-09-30). Explicit exit N preserved in both modes; native failure
+// collapses to 1 in both; -NonInteractive never hangs.
 func BuildPowershellArgv(exe string) []string {
-	return []string{exe, "-NoProfile", "-NonInteractive", "-File", "-"}
+	return []string{exe, "-NoProfile", "-NonInteractive", "-Command", "-"}
 }
 
 // Run executes argv (argv[0] is the program, normally exe) with stdin

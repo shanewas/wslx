@@ -13,5 +13,7 @@
 
 ### Fixed
 
+- PowerShell stdin mode uses `-Command -` instead of `-File -`:
+  same exit fidelity, clean stdout (no `PS <cwd>>` echo lines).
 - `wsl --distro` from inside WSL now fails clean with `doctor`
   guidance when interop is broken, instead of leaking an exec error.

@@ -422,7 +422,7 @@ examples:
 usage: wslx pwsh [--] <statement...>
 
 Each argument is one PowerShell statement, joined and piped to
-pwsh -NoProfile -NonInteractive -File - (exit code preserved).
+pwsh -NoProfile -NonInteractive -Command - (exit code preserved).
 With no args it reads the script from piped stdin; on an
 interactive TTY it starts an interactive session.
 

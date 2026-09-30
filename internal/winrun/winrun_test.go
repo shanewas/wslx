@@ -11,7 +11,7 @@ import (
 
 func TestBuildPowershellArgv(t *testing.T) {
 	got := BuildPowershellArgv("pwsh.exe")
-	want := []string{"pwsh.exe", "-NoProfile", "-NonInteractive", "-File", "-"}
+	want := []string{"pwsh.exe", "-NoProfile", "-NonInteractive", "-Command", "-"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q want %q", got, want)
 	}
