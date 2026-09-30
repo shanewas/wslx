@@ -4,6 +4,16 @@
 
 ### Added
 
+- arm64 binaries for Linux and Windows; CI covers ubuntu-24.04-arm.
+
+### Fixed
+
+- Dev builds report `dev` instead of a stale release number.
+
+## [0.1.0] - 2026-09-30
+
+### Added
+
 - CLI slice 1: `win`, `wsl`, `pwsh`, `path`, `env`, `doctor`,
   `version`, plus the `--json` envelope for machine-readable output.
 - Quoting corpus tests, path/env/doctor unit tests; CI on Ubuntu +

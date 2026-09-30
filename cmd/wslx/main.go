@@ -21,7 +21,7 @@ import (
 	"github.com/shanewas/wslx/internal/wslrun"
 )
 
-var version = "v0.1.0"
+var version = "dev"
 
 var jsonOut bool
 
