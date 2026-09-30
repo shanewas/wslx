@@ -62,7 +62,13 @@ From source:
 go install github.com/shanewas/wslx/cmd/wslx@latest
 ```
 
-Package managers (winget, scoop, chocolatey) are planned at public launch.
+Package managers:
+
+```powershell
+winget install Shanewas.wslx
+scoop bucket add wslx https://github.com/shanewas/scoop-bucket
+scoop install wslx
+```
 
 ## Layout
 
