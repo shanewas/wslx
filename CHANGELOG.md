@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-01
+
 ### Added
 
 - `doctor` picks its probes by side. Windows checks `wsl.exe`, that the
