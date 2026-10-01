@@ -34,5 +34,36 @@ nfpms:
       - deb
       - rpm
 
-release:
-  draft: true
+# Opens the microsoft/winget-pkgs pull request from the shanewas/winget-pkgs
+# fork when WINGET_TOKEN (a PAT with public_repo) is set; otherwise the
+# manifests are only written to dist/ for a manual submission.
+winget:
+  - name: wslx
+    publisher: Shanewas
+    publisher_url: https://github.com/shanewas
+    publisher_support_url: https://github.com/shanewas/wslx/issues
+    package_identifier: Shanewas.wslx
+    short_description: Bidirectional Windows-WSL interop helper in one static binary.
+    description: One static binary installed on both Windows and WSL. Windows tools and PowerShell from bash, Linux commands from PowerShell, paths translated, and a doctor that names the exact fix.
+    homepage: https://github.com/shanewas/wslx
+    license: MIT
+    license_url: https://github.com/shanewas/wslx/blob/main/LICENSE
+    release_notes_url: https://github.com/shanewas/wslx/blob/main/CHANGELOG.md
+    tags:
+      - wsl
+      - windows-subsystem-for-linux
+      - interop
+      - cli
+      - powershell
+    skip_upload: '{{ if envOrDefault "WINGET_TOKEN" "" }}false{{ else }}true{{ end }}'
+    repository:
+      owner: shanewas
+      name: winget-pkgs
+      branch: "wslx-{{ .Version }}"
+      token: '{{ envOrDefault "WINGET_TOKEN" "" }}'
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
