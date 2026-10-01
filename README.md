@@ -142,12 +142,13 @@ Expand-Archive $Zip "$env:LOCALAPPDATA\wslx" -Force
 
 Open a new terminal afterwards; `wslx version` should print the version on both sides.
 
-Package managers:
+Package managers (winget works once the manifest lands in
+microsoft/winget-pkgs; until then use the zip above):
 
 ```powershell
-winget install Shanewas.wslx
 scoop bucket add wslx https://github.com/shanewas/scoop-bucket
 scoop install wslx
+winget install Shanewas.wslx
 ```
 
 From source (Go 1.22+), on either side:

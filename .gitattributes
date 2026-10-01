@@ -1,0 +1,2 @@
+# gofmt and goreleaser want LF everywhere; Windows checkouts default to autocrlf.
+* text=auto eol=lf
