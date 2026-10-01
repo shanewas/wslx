@@ -1,45 +1,52 @@
-// Package winrun executes argv on the Windows side.
+// Package winrun resolves Windows executables from either side.
 package winrun
 
 import (
-	"bytes"
-	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/shanewas/wslx/internal/detect"
 )
 
-// BuildPowershellArgv returns full argv for stdin-mode PowerShell:
-// -Command - reads script from stdin with clean stdout. -File - echoes
-// PS <cwd>> prompt lines to stdout on both engines (live battery
-// 2026-09-30). Explicit exit N preserved in both modes; native failure
-// collapses to 1 in both; -NonInteractive never hangs.
-func BuildPowershellArgv(exe string) []string {
-	return []string{exe, "-NoProfile", "-NonInteractive", "-Command", "-"}
+// System32 is where the Windows tools live as seen from WSL.
+const System32 = "/mnt/c/Windows/System32"
+
+// Resolve finds the executable for name. On Windows PATH plus PATHEXT
+// decide. From WSL it tries PATH as given, then with .exe, then
+// System32, so `wslx win ipconfig` works even when wsl.conf sets
+// appendWindowsPath=false. Names with a path separator pass through.
+func Resolve(name string) (string, error) {
+	if strings.ContainsAny(name, `/\`) {
+		return name, nil
+	}
+	if detect.DetectSide() == detect.SideWindows {
+		return exec.LookPath(name)
+	}
+	var tried []string
+	for _, c := range candidates(name) {
+		tried = append(tried, c)
+		if strings.HasPrefix(c, "/") {
+			if detect.Exists(c) {
+				return c, nil
+			}
+			continue
+		}
+		if p, err := exec.LookPath(c); err == nil {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("%q not found on the Windows side (tried %s); wsl.conf may set appendWindowsPath=false", name, strings.Join(tried, ", "))
 }
 
-// Run executes argv (argv[0] is the program, normally exe) with stdin
-// fed when non-empty. Exit comes from ExitError.ExitCode; a start
-// failure returns exit -1 with err set.
-func Run(exe string, argv []string, stdin string) (stdout, stderr string, exit int, err error) {
-	prog := exe
-	var args []string
-	if len(argv) > 0 {
-		prog = argv[0]
-		args = argv[1:]
+func candidates(name string) []string {
+	names := []string{name}
+	if !strings.HasSuffix(strings.ToLower(name), ".exe") {
+		names = append(names, name+".exe")
 	}
-	cmd := exec.Command(prog, args...)
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
+	out := append([]string{}, names...)
+	for _, n := range names {
+		out = append(out, System32+"/"+n)
 	}
-	if err = cmd.Run(); err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			return outBuf.String(), errBuf.String(), ee.ExitCode(), err
-		}
-		return outBuf.String(), errBuf.String(), -1, err
-	}
-	return outBuf.String(), errBuf.String(), 0, nil
+	return out
 }

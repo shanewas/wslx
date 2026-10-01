@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"unicode/utf8"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/shanewas/wslx/internal/doctor"
 	"github.com/shanewas/wslx/internal/envx"
 	"github.com/shanewas/wslx/internal/pathx"
+	"github.com/shanewas/wslx/internal/proc"
 	"github.com/shanewas/wslx/internal/pwshx"
 	"github.com/shanewas/wslx/internal/winrun"
 	"github.com/shanewas/wslx/internal/wslrun"
@@ -36,6 +39,10 @@ func main() {
 		return
 	}
 	cmd, rest := args[0], args[1:]
+	switch cmd {
+	case "path", "env", "doctor", "version":
+		rest = takeJSON(rest)
+	}
 	if restHasHelp(rest) {
 		printCmdHelp(cmd)
 		return
@@ -53,11 +60,25 @@ func main() {
 		cmdEnv(rest)
 	case "doctor":
 		cmdDoctor(rest)
-	case "version":
+	case "version", "--version", "-v":
 		cmdVersion()
 	default:
 		fatalf("unknown command %q (try `wslx --help`)", cmd)
 	}
+}
+
+// takeJSON accepts --json after the command for commands that never
+// forward arguments to a child.
+func takeJSON(args []string) []string {
+	out := args[:0:0]
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func restHasHelp(rest []string) bool {
@@ -92,22 +113,42 @@ func stripDashDash(args []string) []string {
 	return args
 }
 
-// pipedStdin returns piped stdin content, or "" when stdin is a TTY.
-func pipedStdin() string {
-	fi, err := os.Stdin.Stat()
-	if err != nil || fi.Mode()&os.ModeCharDevice != 0 {
-		return ""
-	}
-	b, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		fatalf("read stdin: %v", err)
-	}
-	return string(b)
-}
-
 func stdinIsTTY() bool {
 	fi, err := os.Stdin.Stat()
 	return err == nil && fi.Mode()&os.ModeCharDevice != 0
+}
+
+// stdinIfPiped returns os.Stdin when data is piped in, nil on a TTY so
+// a scripted (--json) child never blocks on the terminal.
+func stdinIfPiped() io.Reader {
+	if stdinIsTTY() {
+		return nil
+	}
+	return os.Stdin
+}
+
+// exitCode masks to the 0-255 a Unix shell can see; Windows keeps the
+// full 32-bit value.
+func exitCode(n int) int {
+	if runtime.GOOS != "windows" {
+		return n & 0xff
+	}
+	return n
+}
+
+// run launches argv: streams inherited normally, so output streams and
+// interactive tools work; captured into the JSON envelope with --json.
+// A non-nil stdin replaces the terminal or pipe.
+func run(argv []string, stdin io.Reader) {
+	if !jsonOut {
+		exit, err := proc.Inherit(argv, stdin)
+		os.Exit(exitCode(childExit(err, exit)))
+	}
+	if stdin == nil {
+		stdin = stdinIfPiped()
+	}
+	stdout, stderr, exit, err := proc.Capture(argv, stdin)
+	emitJSON(stdout, stderr, childExit(err, exit))
 }
 
 // envelope is the --json output shape.
@@ -142,25 +183,20 @@ func jsonSide() string {
 	}
 }
 
-func emit(stdout, stderr string, exit int) {
-	if jsonOut {
-		out, outEnc := encodeStream(stdout)
-		errS, errEnc := encodeStream(stderr)
-		b, _ := json.Marshal(envelope{
-			Side: jsonSide(), Distro: detect.Distro(),
-			Exit: exit & 0xff, ExitFull: exit,
-			Stdout: out, Stderr: errS,
-			StdoutEncoding: outEnc, StderrEncoding: errEnc,
-		})
-		fmt.Println(string(b))
-	} else {
-		io.WriteString(os.Stdout, stdout)
-		io.WriteString(os.Stderr, stderr)
-	}
-	os.Exit(exit & 0xff)
+func emitJSON(stdout, stderr string, exit int) {
+	out, outEnc := encodeStream(stdout)
+	errS, errEnc := encodeStream(stderr)
+	b, _ := json.Marshal(envelope{
+		Side: jsonSide(), Distro: detect.Distro(),
+		Exit: exit & 0xff, ExitFull: exit,
+		Stdout: out, Stderr: errS,
+		StdoutEncoding: outEnc, StderrEncoding: errEnc,
+	})
+	fmt.Println(string(b))
+	os.Exit(exitCode(exit))
 }
 
-// childExit maps a Run error to its exit code, fatal on start failure.
+// childExit maps a run error to its exit code, fatal on start failure.
 func childExit(err error, exit int) int {
 	if err == nil {
 		return 0
@@ -189,8 +225,11 @@ func cmdWin(args []string) {
 		usagef("win", "need a command")
 	}
 	needWindowsSide()
-	stdout, stderr, exit, err := winrun.Run(args[0], args, pipedStdin())
-	emit(stdout, stderr, childExit(err, exit))
+	exe, err := winrun.Resolve(args[0])
+	if err != nil {
+		fatalf("%v; run `wslx doctor` for fix guidance", err)
+	}
+	run(append([]string{exe}, args[1:]...), nil)
 }
 
 func cmdWsl(args []string) {
@@ -214,8 +253,11 @@ func cmdWsl(args []string) {
 	if distro != "" && detect.DetectSide() == detect.SideWSL {
 		needWindowsSide()
 	}
-	stdout, stderr, exit, err := wslrun.Run(args, distro, pipedStdin())
-	emit(stdout, stderr, childExit(err, exit))
+	argv, err := wslrun.Argv(distro, args)
+	if err != nil {
+		fatalf("%v; run `wslx doctor` for fix guidance", err)
+	}
+	run(argv, nil)
 }
 
 func cmdPwsh(args []string) {
@@ -225,34 +267,31 @@ func cmdPwsh(args []string) {
 	if err != nil {
 		fatalf("%v; run `wslx doctor` for fix guidance", err)
 	}
-	if len(args) == 0 {
-		if s := pipedStdin(); s != "" {
-			runPwshScript(exe, s)
-		}
+	script := strings.Join(args, " ")
+	if script == "" {
 		if stdinIsTTY() {
-			interactivePwsh(exe)
+			if jsonOut {
+				fatalf("no script given; pass statements or pipe a script")
+			}
+			run(pwshx.InteractiveArgv(exe), nil)
 		}
-		fatalf("no script given and stdin is empty; pass statements, pipe a script, or run from a TTY")
-	}
-	runPwshScript(exe, strings.Join(args, "\n")+"\n")
-}
-
-func runPwshScript(exe, script string) {
-	argv := winrun.BuildPowershellArgv(exe)
-	stdout, stderr, exit, err := winrun.Run(exe, argv, script)
-	emit(stdout, stderr, childExit(err, exit))
-}
-
-func interactivePwsh(exe string) {
-	c := exec.Command(exe, pwshx.BaseFlags()...)
-	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := c.Run(); err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			os.Exit(ee.ExitCode() & 0xff)
+		b, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fatalf("read stdin: %v", err)
 		}
-		fatalf("%v", err)
+		script = string(b)
+		if strings.TrimSpace(script) == "" {
+			fatalf("no script given and stdin is empty; pass statements, pipe a script, or run from a TTY")
+		}
 	}
+	// A Windows console already shows Unicode; only pipes and the WSL
+	// side need PowerShell forced to UTF-8.
+	utf8Out := jsonOut || detect.DetectSide() != detect.SideWindows
+	argv, stdin := pwshx.ScriptArgv(exe, script, utf8Out)
+	if stdin != "" {
+		run(argv, strings.NewReader(stdin))
+	}
+	run(argv, nil)
 }
 
 func cmdPath(args []string) {
@@ -364,13 +403,26 @@ func cmdDoctor(args []string) {
 	}
 }
 
+// versionString prefers the release ldflag, then the module version a
+// `go install ...@vX.Y.Z` build records, then "dev".
+func versionString() string {
+	if version != "dev" {
+		return version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return bi.Main.Version
+	}
+	return version
+}
+
 func cmdVersion() {
+	v := versionString()
 	if jsonOut {
-		b, _ := json.Marshal(map[string]string{"version": version})
+		b, _ := json.Marshal(map[string]string{"version": v})
 		fmt.Println(string(b))
 		return
 	}
-	fmt.Println("wslx " + version)
+	fmt.Println("wslx " + v)
 }
 
 const topHelp = `wslx - run the other side natively
@@ -378,61 +430,85 @@ const topHelp = `wslx - run the other side natively
 usage: wslx [--json] <command> [args...]
 
 commands:
-  win [--] <command...>               run Windows command from anywhere
-  wsl [--distro D] [--] <command...>  run Linux command from anywhere
-  pwsh [--] <script...>               PowerShell via stdin, never hangs
+  win [--] <exe> [args...]            run a Windows executable from anywhere
+  wsl [--distro D] [--] <command...>  run a Linux command from anywhere
+  pwsh [--] <statements...>           PowerShell script, never hangs
   path (--win|--unix|--mixed) <p>      translate a path across the boundary
   env show|suggest ...                parse or build WSLENV values
-  doctor                              health + fix guidance
-  version                             print version
+  doctor                              health + fix guidance for this side
+  version                             print version (also --version, -v)
 
-global flags: --json  machine-readable envelope
+global flags: --json  machine-readable envelope (before the command, or
+              after it for path/env/doctor/version)
 per-command help: wslx <command> --help
+
+Two rules: 'win' runs executables, not cmdlets (use pwsh for those), and
+'win'/'wsl' pass arguments through with no shell, so ~, globs, pipes and
+$VARS only expand inside 'bash -lc' or 'cmd /c'.
 `
 
 var cmdHelps = map[string]string{
-	"win": `wslx win - run a Windows command from anywhere
+	"win": `wslx win - run a Windows executable from anywhere
 
-usage: wslx win [--] <command...>
+usage: wslx win [--] <exe> [args...]
 
-Runs directly when already on Windows, else via interop .exe launch.
+Runs an executable (.exe, .cmd, .bat), not a PowerShell cmdlet; give
+cmdlets to wslx pwsh. On Windows PATH decides. From WSL the name is
+tried as given, with .exe, then in C:\Windows\System32, so it works
+when wsl.conf sets appendWindowsPath=false. Output streams and the
+child gets your terminal; with --json both streams are captured.
 Fails clean (pointing at wslx doctor) when interop is broken.
 
 examples:
-  wslx win Get-ChildItem C:\Users\me
+  wslx win ipconfig /all
+  wslx win cmd /c dir 'C:\Users'
+  wslx win code .
 `,
 	"wsl": `wslx wsl - run a Linux command from anywhere
 
 usage: wslx wsl [--distro D] [--] <command...>
 
-Same-side rule: inside WSL without --distro runs with no hop.
-From WSL, --distro hops via interop and fails clean (pointing at
-wslx doctor) when interop is broken.
+Same-side rule: inside WSL without --distro runs with no hop. From
+Windows, or with --distro, it hops through wsl.exe -e. Exec form: no
+shell runs on the far side, so ~, globs, pipes and $VARS need one.
+Fails clean (pointing at wslx doctor) when interop is broken.
 
 examples:
-  wslx wsl ls -la ~/projects
+  wslx wsl uname -a
   wslx wsl grep -R "TODO" .
-  wslx wsl --distro Ubuntu-22.04 -- uname -a
+  wslx wsl -- bash -lc 'ls ~/projects | wc -l'
+  wslx wsl --distro Ubuntu-22.04 -- cat /etc/os-release
 `,
-	"pwsh": `wslx pwsh - PowerShell specifically, stdin-piped, never hangs
+	"pwsh": `wslx pwsh - run PowerShell, never hangs
 
-usage: wslx pwsh [--] <statement...>
+usage: wslx pwsh [--] <statements...>
+       <script> | wslx pwsh
+       wslx pwsh            (on a terminal: interactive session)
 
-Each argument is one PowerShell statement, joined and piped to
-pwsh -NoProfile -NonInteractive -Command - (exit code preserved).
-With no args it reads the script from piped stdin; on an
-interactive TTY it starts an interactive session.
+Arguments join with spaces into one script; separate statements with ;
+or newlines. The script travels as -EncodedCommand with -NoProfile
+-NonInteractive, so quoting and console code pages cannot mangle it,
+and PowerShell is switched to UTF-8 output on the way into WSL. Piped
+stdin is the script when no statements are given, otherwise it is data
+for $input. Exit codes come back as PowerShell set them.
 
 examples:
   wslx pwsh "Get-Service | Where-Object Status -eq Running"
+  wslx pwsh 'Get-ChildItem C:\Users\me; exit 3'
+  wslx pwsh < setup.ps1
 `,
 	"path": `wslx path - translate a path across the boundary
 
 usage: wslx path (--win|--unix|--mixed) <p>
 
+Uses wslpath inside WSL. On Windows, drive and \\wsl.localhost paths
+translate in-process; paths inside the distro go through wsl.exe.
+
 examples:
   wslx path --win ~/projects/app
   # -> \\wsl.localhost\Ubuntu-22.04\home\...\app
+  wslx path --unix 'C:\Users\me\src'
+  # -> /mnt/c/Users/me/src
 `,
 	"env": `wslx env - parse or build WSLENV values
 
@@ -445,16 +521,21 @@ examples:
 `,
 	"doctor": `wslx doctor - health + fix guidance
 
-usage: wslx doctor
+usage: wslx doctor [--json]
 
-Green means everything works. Every failure prints cause plus the
-exact command that fixes it. Exit 0 when all green, 1 otherwise.
+Probes depend on the side. Inside WSL: wsl.conf interop settings, the
+binfmt entry, the interop socket (WSL2), wslpath, wsl.exe, PowerShell,
+distro name. On Windows: wsl.exe, that the default distro boots,
+PowerShell. Every failure prints cause plus the exact command that
+fixes it. Exit 0 when all green, 1 otherwise.
 
 examples:
   wslx doctor
+  wslx doctor --json
 `,
 	"version": `wslx version - print version
 
-usage: wslx version
+usage: wslx version [--json]
+       wslx --version
 `,
 }

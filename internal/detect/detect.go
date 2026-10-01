@@ -4,7 +4,7 @@ package detect
 
 import (
 	"os"
-	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -33,8 +33,10 @@ func (s Side) String() string {
 	}
 }
 
-// BinfmtPath is the kernel interop gate. Absent means broken interop.
-const BinfmtPath = "/proc/sys/fs/binfmt_misc/WSLInterop"
+// BinfmtGlob matches the kernel interop gate. Newer WSL registers it
+// again as WSLInterop-late after systemd-binfmt flushes the table, so
+// either name means .exe launch works.
+const BinfmtGlob = "/proc/sys/fs/binfmt_misc/WSLInterop*"
 
 // DetectSide reports the current side via GOOS plus /proc/version
 // (microsoft/WSL marker, case-insensitive) or WSL_DISTRO_NAME.
@@ -48,13 +50,25 @@ func DetectSide() Side {
 	if os.Getenv("WSL_DISTRO_NAME") != "" {
 		return SideWSL
 	}
-	if b, err := os.ReadFile("/proc/version"); err == nil {
-		v := strings.ToLower(string(b))
-		if strings.Contains(v, "microsoft") || strings.Contains(v, "wsl") {
-			return SideWSL
-		}
+	v := procVersion()
+	if strings.Contains(v, "microsoft") || strings.Contains(v, "wsl") {
+		return SideWSL
 	}
 	return SideLinux
+}
+
+func procVersion() string {
+	b, err := os.ReadFile("/proc/version")
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(string(b))
+}
+
+// IsWSL2 reports a WSL2 kernel. WSL1 does interop in-kernel and sets
+// no WSL_INTEROP socket, so that probe only applies here.
+func IsWSL2() bool {
+	return os.Getenv("WSL_INTEROP") != "" || strings.Contains(procVersion(), "wsl2")
 }
 
 // Distro returns the current distro name, or "" when unknown.
@@ -62,37 +76,37 @@ func Distro() string {
 	return os.Getenv("WSL_DISTRO_NAME")
 }
 
+// BinfmtPresent reports whether the kernel can launch Windows .exe files.
+func BinfmtPresent() bool {
+	m, _ := filepath.Glob(BinfmtGlob)
+	return len(m) > 0
+}
+
 // InteropHealth is the WSL->Windows launch gate state.
 type InteropHealth struct {
-	Binfmt  bool
-	Socket  bool
-	Wslpath bool
-	Detail  string
+	Binfmt bool
+	Socket bool
+	WSL2   bool
+	Detail string
 }
 
-// Healthy reports whether .exe launch should work.
+// Healthy reports whether .exe launch should work: the binfmt entry,
+// plus a live interop socket on WSL2.
 func (h InteropHealth) Healthy() bool {
-	return h.Binfmt && h.Socket && h.Wslpath
+	return h.Binfmt && (h.Socket || !h.WSL2)
 }
 
-// CheckInterop probes the binfmt entry, the $WSL_INTEROP socket,
-// and wslpath availability.
+// CheckInterop probes the binfmt entry and the $WSL_INTEROP socket.
 func CheckInterop() InteropHealth {
-	h := InteropHealth{}
-	h.Binfmt = Exists(BinfmtPath)
+	h := InteropHealth{Binfmt: BinfmtPresent(), WSL2: IsWSL2()}
 	sock := os.Getenv("WSL_INTEROP")
 	h.Socket = sock != "" && Exists(sock)
-	_, err := exec.LookPath("wslpath")
-	h.Wslpath = err == nil
 	var missing []string
 	if !h.Binfmt {
 		missing = append(missing, "binfmt WSLInterop entry")
 	}
-	if !h.Socket {
+	if h.WSL2 && !h.Socket {
 		missing = append(missing, "WSL_INTEROP socket")
-	}
-	if !h.Wslpath {
-		missing = append(missing, "wslpath")
 	}
 	if len(missing) == 0 {
 		h.Detail = "interop healthy"

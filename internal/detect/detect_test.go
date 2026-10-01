@@ -59,6 +59,23 @@ func TestExists(t *testing.T) {
 	}
 }
 
+func TestHealthyGate(t *testing.T) {
+	cases := []struct {
+		h    InteropHealth
+		want bool
+	}{
+		{InteropHealth{Binfmt: true, WSL2: false, Socket: false}, true}, // WSL1: no socket exists
+		{InteropHealth{Binfmt: true, WSL2: true, Socket: true}, true},
+		{InteropHealth{Binfmt: true, WSL2: true, Socket: false}, false},
+		{InteropHealth{Binfmt: false, WSL2: false, Socket: false}, false},
+	}
+	for _, c := range cases {
+		if got := c.h.Healthy(); got != c.want {
+			t.Errorf("%+v Healthy()=%v want %v", c.h, got, c.want)
+		}
+	}
+}
+
 func TestCheckInteropDetailNonEmpty(t *testing.T) {
 	h := CheckInterop()
 	if h.Detail == "" {
