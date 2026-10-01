@@ -2,35 +2,40 @@ package doctor
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func fakeProbes() []Prober {
-	return []Prober{
-		ProbeFunc(func() Check { return Check{Name: "a green", OK: true} }),
-		ProbeFunc(func() Check { return Check{Name: "b red", OK: false, Fix: "run: fix-b"} }),
+func fakeProbes() []Probe {
+	return []Probe{
+		func() Check { return Check{Name: "a green", OK: true} },
+		func() Check { return Check{Name: "b red", OK: false, Fix: "run: fix-b"} },
 	}
 }
 
 func TestRunWithFakes(t *testing.T) {
 	checks := RunWith(fakeProbes())
-	if len(checks) != 2 || !checks[0].OK || checks[1].OK {
+	if len(checks) != 2 || !checks[0].OK || checks[1].OK || checks[1].Fix != "run: fix-b" {
 		t.Fatalf("got %+v", checks)
 	}
 }
 
-func TestFixNonEmptyOnFailure(t *testing.T) {
-	for _, c := range Run() {
+func TestLiveRunShape(t *testing.T) {
+	checks := Run()
+	if len(checks) == 0 {
+		t.Fatal("no checks for this side")
+	}
+	for _, c := range checks {
+		if c.Name == "" {
+			t.Errorf("check with empty Name: %+v", c)
+		}
 		if !c.OK && c.Fix == "" {
 			t.Errorf("failing check %q has empty Fix", c.Name)
 		}
 	}
-	// Fake red check keeps its fix through RunWith.
-	red := RunWith(fakeProbes())[1]
-	if red.Fix == "" {
-		t.Error("fake failing check lost Fix")
-	}
+	t.Logf("\n%s", FormatHuman(checks))
 }
 
 func TestFormatJSONShape(t *testing.T) {
@@ -44,6 +49,9 @@ func TestFormatJSONShape(t *testing.T) {
 	if decoded[1].OK || decoded[1].Fix != "run: fix-b" {
 		t.Fatalf("shape: %+v", decoded)
 	}
+	if got := FormatJSON(nil); got != "[]\n" {
+		t.Fatalf("nil checks: %q", got)
+	}
 }
 
 func TestFormatHuman(t *testing.T) {
@@ -51,13 +59,37 @@ func TestFormatHuman(t *testing.T) {
 	if !strings.Contains(out, "ok   a green") || !strings.Contains(out, "FAIL b red") {
 		t.Fatalf("human:\n%s", out)
 	}
-	if !strings.Contains(out, "fix: run: fix-b") {
-		t.Fatalf("human lacks fix:\n%s", out)
+	if !strings.Contains(out, "fix: run: fix-b") || !strings.Contains(out, "1/2 checks green") {
+		t.Fatalf("human lacks fix or tally:\n%s", out)
 	}
 }
 
-func TestLiveRunHasSixChecks(t *testing.T) {
-	if got := len(Run()); got != 6 {
-		t.Fatalf("got %d checks", got)
+func TestWslConfFalse(t *testing.T) {
+	conf := filepath.Join(t.TempDir(), "wsl.conf")
+	body := `
+[boot]
+systemd = true
+
+[automount]
+enabled = false
+
+[Interop]
+# enabled = false
+appendWindowsPath = FALSE   # trimmed PATH
+`
+	if err := os.WriteFile(conf, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if wslConfFalse(conf, "interop", "enabled") {
+		t.Error("commented-out enabled=false must not count")
+	}
+	if !wslConfFalse(conf, "interop", "appendWindowsPath") {
+		t.Error("appendWindowsPath = FALSE with trailing comment must count")
+	}
+	if wslConfFalse(conf, "interop", "systemd") {
+		t.Error("key from another section leaked")
+	}
+	if wslConfFalse(filepath.Join(t.TempDir(), "missing"), "interop", "enabled") {
+		t.Error("missing file must mean default (true)")
 	}
 }

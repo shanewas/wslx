@@ -1,62 +1,35 @@
-// Package wslrun executes argv on the WSL side.
+// Package wslrun builds the argv that runs a command on the WSL side.
 package wslrun
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"os/exec"
-	"strings"
-
 	"github.com/shanewas/wslx/internal/detect"
-	"github.com/shanewas/wslx/internal/quote"
+	"github.com/shanewas/wslx/internal/winrun"
 )
 
-// WslExe is the default launcher used to hop distros.
+// WslExe is the launcher used to hop distros.
 const WslExe = "wsl.exe"
 
-// BuildWslArgv returns full argv for the hop: wsl.exe -d <distro>
-// (when non-empty) -e plus argv verbatim.
-func BuildWslArgv(distro string, argv []string) []string {
-	return append([]string{WslExe}, quote.WslExecArgv(distro, argv)...)
-}
-
-func runArgs(full []string, stdin string) (stdout, stderr string, exit int, err error) {
-	if len(full) == 0 {
-		return "", "", -1, fmt.Errorf("empty argv")
+// HopArgv returns the exec-form hop: wslExe -d <distro> (when
+// non-empty) -e plus argv verbatim. No shell runs on the far side.
+func HopArgv(wslExe, distro string, argv []string) []string {
+	out := []string{wslExe}
+	if distro != "" {
+		out = append(out, "-d", distro)
 	}
-	cmd := exec.Command(full[0], full[1:]...)
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
-	}
-	if err = cmd.Run(); err != nil {
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			return outBuf.String(), errBuf.String(), ee.ExitCode(), err
-		}
-		return outBuf.String(), errBuf.String(), -1, err
-	}
-	return outBuf.String(), errBuf.String(), 0, nil
+	out = append(out, "-e")
+	return append(out, argv...)
 }
 
-// RunDirect executes argv in the current environment with no hop.
-func RunDirect(argv []string, stdin string) (string, string, int, error) {
-	return runArgs(argv, stdin)
-}
-
-// RunViaWsl hops via wslExe into distro (default distro when empty).
-func RunViaWsl(wslExe, distro string, argv []string, stdin string) (string, string, int, error) {
-	return runArgs(append([]string{wslExe}, quote.WslExecArgv(distro, argv)...), stdin)
-}
-
-// Run applies the same-side rule: inside WSL with no --distro it runs
-// directly, otherwise it hops via wsl.exe.
-func Run(argv []string, distro, stdin string) (string, string, int, error) {
+// Argv applies the same-side rule: inside WSL with no --distro the
+// command runs as is, otherwise it hops through wsl.exe, resolved the
+// same way `win` resolves tools so a trimmed PATH still works.
+func Argv(distro string, argv []string) ([]string, error) {
 	if distro == "" && detect.DetectSide() == detect.SideWSL {
-		return RunDirect(argv, stdin)
+		return argv, nil
 	}
-	return RunViaWsl(WslExe, distro, argv, stdin)
+	wsl, err := winrun.Resolve(WslExe)
+	if err != nil {
+		return nil, err
+	}
+	return HopArgv(wsl, distro, argv), nil
 }

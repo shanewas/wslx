@@ -3,10 +3,13 @@
 package pathx
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/shanewas/wslx/internal/detect"
 )
 
 var (
@@ -16,20 +19,35 @@ var (
 	wslRe   = regexp.MustCompile(`^(?:\\\\|//)wsl\.localhost[/\\]([^/\\]+)[/\\](.*)$`)
 )
 
-// Translate converts p to target form ("win", "unix" or "mixed").
-// It shells out to wslpath when available, else uses TranslatePure.
+// Translate converts p to target form ("win", "unix" or "mixed"):
+// wslpath when on PATH, else TranslatePure, else (on Windows) wslpath
+// inside the default distro, which knows the distro's own paths.
 func Translate(p, target string) (string, error) {
 	flag, err := wslFlag(target)
 	if err != nil {
 		return "", err
 	}
-	wslpath, err := exec.LookPath("wslpath")
-	if err != nil {
-		return TranslatePure(p, target)
+	if wslpath, err := exec.LookPath("wslpath"); err == nil {
+		return viaWslpath(wslpath, flag, p)
 	}
-	out, err := exec.Command(wslpath, flag, p).Output()
+	out, perr := TranslatePure(p, target)
+	if perr == nil {
+		return out, nil
+	}
+	if detect.DetectSide() == detect.SideWindows {
+		return viaWslpath("wsl.exe", "-e", "wslpath", flag, p)
+	}
+	return "", perr
+}
+
+func viaWslpath(argv ...string) (string, error) {
+	out, err := exec.Command(argv[0], argv[1:]...).Output()
 	if err != nil {
-		return "", fmt.Errorf("wslpath %s %q: %w", flag, p, err)
+		var ee *exec.ExitError
+		if errors.As(err, &ee) && len(ee.Stderr) > 0 {
+			return "", fmt.Errorf("%s: %s", strings.Join(argv, " "), strings.TrimSpace(string(ee.Stderr)))
+		}
+		return "", fmt.Errorf("%s: %w", strings.Join(argv, " "), err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
