@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-01
+
 ### Added
 
 - `doctor` picks its probes by side. Windows checks `wsl.exe`, that the
@@ -16,6 +18,11 @@
 
 ### Changed
 
+- Releases: the release workflow can be run by hand with a version; it
+  checks, tags and releases in one run. Releases publish directly instead
+  of as drafts. A `winget` publisher opens the microsoft/winget-pkgs pull
+  request once a `WINGET_TOKEN` secret exists; without it the manifests
+  are only rendered into `dist/`.
 - `win`, `wsl` and `pwsh` without `--json` hand the child your terminal:
   output streams, `tail -f` and interactive tools work, Ctrl-C reaches the
   child, and piped stdin passes through instead of being read into memory

@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to tag on this ref and release, e.g. 0.1.2'
+        required: true
 
 permissions:
   contents: write
@@ -19,8 +24,21 @@ jobs:
         with:
           go-version: stable
       - run: go build ./... && go vet ./... && go test ./...
+      # Manual runs create the tag here, after the checks. A tag pushed with
+      # GITHUB_TOKEN does not fire the push trigger, so this stays one run.
+      - if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must be X.Y.Z, got '$VERSION'"; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -m "v$VERSION"
+          git push origin "v$VERSION"
       - uses: goreleaser/goreleaser-action@v6
         with:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional PAT (public_repo) for the winget pull request; unset = manifests only rendered into dist/.
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
